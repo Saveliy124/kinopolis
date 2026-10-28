@@ -1,0 +1,31 @@
+flowchart LR
+    Guest[Гость]
+    User[Пользователь]
+    Admin[Администратор]
+
+    Browse((Смотреть фильмы))
+    Schedule((Смотреть расписание))
+    Seats((Смотреть места))
+    Auth((Регистрироваться и входить))
+    Reserve((Бронировать места))
+    Purchase((Покупать билеты))
+    Cancel((Отменять бронь))
+    Movies((Управлять фильмами))
+    Halls((Управлять залами))
+    Sessions((Создавать сеансы))
+    Prices((Менять цены))
+
+    Guest --> Browse
+    Guest --> Schedule
+    Guest --> Seats
+    User --> Browse
+    User --> Schedule
+    User --> Seats
+    User --> Auth
+    User --> Reserve
+    User --> Purchase
+    User --> Cancel
+    Admin --> Movies
+    Admin --> Halls
+    Admin --> Sessions
+    Admin --> Prices

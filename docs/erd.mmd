@@ -1,0 +1,79 @@
+erDiagram
+    USERS ||--o{ AUTH_SESSIONS : opens
+    USERS ||--o{ BOOKINGS : creates
+    MOVIES ||--o{ SCREENINGS : scheduled_for
+    HALLS ||--o{ SCREENINGS : hosts
+    HALLS ||--|{ SEATS : contains
+    SCREENINGS ||--o{ BOOKINGS : receives
+    BOOKINGS ||--|{ TICKETS : contains
+    SCREENINGS ||--o{ TICKETS : allocates
+    SEATS ||--o{ TICKETS : assigned_to
+    USERS ||--o{ AUDIT_LOG : performs
+
+    USERS {
+        int id PK
+        text email UK
+        text password_hash
+        text role
+    }
+    AUTH_SESSIONS {
+        int id PK
+        int user_id FK
+        text token_hash UK
+        text csrf_token
+        text expires_at
+    }
+    MOVIES {
+        int id PK
+        text title
+        text description
+        int duration_min
+        text age_rating
+        bool active
+    }
+    HALLS {
+        int id PK
+        text name UK
+        int rows_count
+        int seats_per_row
+        bool active
+    }
+    SEATS {
+        int id PK
+        int hall_id FK
+        int row_number
+        int seat_number
+    }
+    SCREENINGS {
+        int id PK
+        int movie_id FK
+        int hall_id FK
+        text starts_at
+        int base_price_cents
+        text status
+    }
+    BOOKINGS {
+        int id PK
+        int user_id FK
+        int screening_id FK
+        text code UK
+        text mode
+        text status
+        int total_cents
+        text expires_at
+    }
+    TICKETS {
+        int id PK
+        int booking_id FK
+        int screening_id FK
+        int seat_id FK
+        int price_cents
+        text status
+    }
+    AUDIT_LOG {
+        int id PK
+        int actor_user_id FK
+        text action
+        text entity_type
+        int entity_id
+    }

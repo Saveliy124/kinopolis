@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Расписание кинотеатра, выбор мест и бронирование билетов">
+  <title>Кинополис</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Кинополис — на главную">
+      <span class="brand-mark" aria-hidden="true">К</span>
+      <span>Кинополис</span>
+    </a>
+    <nav class="main-nav" aria-label="Основная навигация">
+      <a href="#schedule">Расписание</a>
+      <a id="bookings-link" class="is-hidden" href="#bookings">Мои билеты</a>
+      <a id="admin-link" class="is-hidden" href="#admin">Управление</a>
+    </nav>
+    <div class="account-actions">
+      <span id="account-label" class="account-label">Гость</span>
+      <button id="login-button" class="button button-ghost" type="button">Войти</button>
+      <button id="logout-button" class="button button-ghost is-hidden" type="button">Выйти</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Фильмы на большом экране</p>
+        <h1 id="hero-title">Выберите сеанс и любимое место</h1>
+        <p>Смотрите расписание без регистрации. После входа можно забронировать место на 15 минут или сразу купить билет.</p>
+        <a class="button button-primary" href="#schedule">Открыть расписание</a>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="screen-glow"></div>
+        <div class="seat-row seat-row-one"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="seat-row seat-row-two"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="seat-row seat-row-three"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+    </section>
+
+    <section id="schedule" class="section" aria-labelledby="schedule-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Афиша</p>
+          <h2 id="schedule-title">Ближайшие сеансы</h2>
+        </div>
+        <form id="schedule-filter" class="filter-bar">
+          <label>
+            <span>Дата (МСК)</span>
+            <input id="date-filter" type="date" name="date">
+          </label>
+          <label>
+            <span>Фильм</span>
+            <select id="movie-filter" name="movie_id">
+              <option value="">Все фильмы</option>
+            </select>
+          </label>
+          <button class="button button-secondary" type="submit">Показать</button>
+        </form>
+      </div>
+      <div id="movie-grid" class="movie-grid" aria-live="polite"></div>
+    </section>
+
+    <section id="bookings" class="section section-muted is-hidden" aria-labelledby="bookings-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Личный кабинет</p>
+          <h2 id="bookings-title">Мои брони и покупки</h2>
+        </div>
+        <button id="refresh-bookings" class="button button-secondary" type="button">Обновить</button>
+      </div>
+      <div id="booking-list" class="booking-list"></div>
+    </section>
+
+    <section id="admin" class="section is-hidden" aria-labelledby="admin-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Панель администратора</p>
+          <h2 id="admin-title">Управление кинотеатром</h2>
+        </div>
+      </div>
+      <div class="admin-grid">
+        <form id="movie-form" class="panel stack">
+          <h3>Новый фильм</h3>
+          <label>Название<input name="title" required maxlength="160"></label>
+          <label>Описание<textarea name="description" required maxlength="3000" rows="4"></textarea></label>
+          <div class="field-row">
+            <label>Длительность, мин<input name="duration_min" type="number" min="1" max="600" required></label>
+            <label>Возрастной рейтинг<input name="age_rating" value="12+" maxlength="10" required></label>
+          </div>
+          <button class="button button-primary" type="submit">Добавить фильм</button>
+        </form>
+
+        <form id="hall-form" class="panel stack">
+          <h3>Новый зал</h3>
+          <label>Название<input name="name" required maxlength="100"></label>
+          <div class="field-row">
+            <label>Рядов<input name="rows_count" type="number" min="1" max="30" required></label>
+            <label>Мест в ряду<input name="seats_per_row" type="number" min="1" max="50" required></label>
+          </div>
+          <button class="button button-primary" type="submit">Создать зал</button>
+          <div id="hall-list" class="compact-list" aria-live="polite"></div>
+        </form>
+
+        <form id="screening-form" class="panel stack">
+          <h3>Новый сеанс</h3>
+          <label>Фильм<select name="movie_id" id="admin-movie-select" required></select></label>
+          <label>Зал<select name="hall_id" id="admin-hall-select" required></select></label>
+          <label>Дата и время (МСК)<input name="starts_at" type="datetime-local" required></label>
+          <label>Описание<input name="description" maxlength="1000" placeholder="Например, премьера"></label>
+          <label>Цена, ₽<input name="price_rub" type="number" min="0" step="0.01" required></label>
+          <button class="button button-primary" type="submit">Создать сеанс</button>
+        </form>
+
+        <form id="price-form" class="panel stack">
+          <h3>Изменить цену</h3>
+          <label>Сеанс<select name="screening_id" id="admin-screening-select" required></select></label>
+          <label>Новая цена, ₽<input name="price_rub" type="number" min="0" step="0.01" required></label>
+          <button class="button button-primary" type="submit">Сохранить цену</button>
+          <p class="form-note">Новая цена действует для следующих заказов. Стоимость уже оформленных билетов не меняется.</p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Кинополис</span>
+    <a href="/openapi.yaml">Документация API</a>
+  </footer>
+
+  <dialog id="auth-dialog" class="dialog">
+    <form method="dialog" class="dialog-close-form"><button class="icon-button" aria-label="Закрыть">×</button></form>
+    <div class="dialog-content">
+      <div class="tab-list" role="tablist" aria-label="Авторизация">
+        <button id="login-tab" class="tab is-active" type="button" role="tab">Вход</button>
+        <button id="register-tab" class="tab" type="button" role="tab">Регистрация</button>
+      </div>
+      <form id="auth-form" class="stack">
+        <h2 id="auth-title">Вход</h2>
+        <label>Электронная почта<input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label>Пароль<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+        <p id="password-hint" class="form-note is-hidden">Не менее 8 символов: строчная и заглавная буквы, цифра.</p>
+        <button id="auth-submit" class="button button-primary" type="submit">Войти</button>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog id="seat-dialog" class="dialog dialog-wide">
+    <form method="dialog" class="dialog-close-form"><button class="icon-button" aria-label="Закрыть">×</button></form>
+    <div class="dialog-content">
+      <p class="eyebrow">Выбор мест</p>
+      <h2 id="seat-title">Сеанс</h2>
+      <p id="seat-meta" class="muted-text"></p>
+      <div class="cinema-screen" aria-hidden="true">Экран</div>
+      <div id="seat-map" class="seat-map" aria-label="Схема зала"></div>
+      <div class="seat-legend" aria-label="Обозначения">
+        <span><i class="legend-seat available"></i>Свободно</span>
+        <span><i class="legend-seat selected"></i>Выбрано</span>
+        <span><i class="legend-seat busy"></i>Занято</span>
+      </div>
+      <div class="checkout-bar">
+        <div><span id="selected-label">Места не выбраны</span><strong id="selected-total">0 ₽</strong></div>
+        <div class="checkout-actions">
+          <button id="reserve-button" class="button button-secondary" type="button" disabled>Забронировать</button>
+          <button id="purchase-button" class="button button-primary" type="button" disabled>Купить</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

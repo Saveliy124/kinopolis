@@ -1,0 +1,23 @@
+services:
+  cinema:
+    environment:
+      COOKIE_SECURE: "1"
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CINEMA_DOMAIN: ${CINEMA_DOMAIN:?Set CINEMA_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      cinema:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

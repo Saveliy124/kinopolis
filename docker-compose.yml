@@ -1,0 +1,20 @@
+services:
+  cinema:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      CINEMA_HOST: 0.0.0.0
+      CINEMA_PORT: 8000
+      CINEMA_DB: /data/cinema.db
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@cinema.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env before starting}
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      SESSION_HOURS: ${SESSION_HOURS:-8}
+      BOOKING_HOLD_MINUTES: ${BOOKING_HOLD_MINUTES:-15}
+    volumes:
+      - cinema_data:/data
+    restart: unless-stopped
+
+volumes:
+  cinema_data:

@@ -1,0 +1,671 @@
+openapi: 3.0.3
+info:
+  title: API веб-приложения кинотеатра
+  version: 1.1.0
+  description: >-
+    REST API каталога, бронирования билетов и управления кинотеатром.
+    Данные передаются в JSON. Изменения требуют cookie и X-CSRF-Token.
+    Ошибки содержат error.code, error.message и request_id.
+    OPTIONS возвращает Allow; неверный метод даёт 405 и Allow.
+    Личные данные и ошибки имеют Cache-Control no-store.
+servers:
+  - url: http://127.0.0.1:8000
+tags:
+  - name: Public
+  - name: Authentication
+  - name: Bookings
+  - name: Administration
+paths:
+  /api/health:
+    get:
+      tags: [Public]
+      summary: Проверить доступность приложения
+      responses:
+        '200':
+          description: Приложение и база данных доступны
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, example: ok}
+        '503':
+          description: База данных отсутствует или её схема недоступна
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, example: unhealthy}
+  /api/movies:
+    get:
+      tags: [Public]
+      summary: Получить активные фильмы
+      responses:
+        '200':
+          description: Список фильмов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movies:
+                    type: array
+                    items: {$ref: '#/components/schemas/Movie'}
+  /api/movies/{movie_id}:
+    get:
+      tags: [Public]
+      summary: Получить отдельный активный фильм
+      parameters:
+        - in: path
+          name: movie_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Фильм
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movie: {$ref: '#/components/schemas/Movie'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/screenings:
+    get:
+      tags: [Public]
+      summary: Получить будущие сеансы
+      parameters:
+        - in: query
+          name: date
+          schema: {type: string, format: date}
+          description: Локальная дата кинотеатра в формате YYYY-MM-DD
+        - in: query
+          name: movie_id
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Список сеансов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  screenings:
+                    type: array
+                    items: {$ref: '#/components/schemas/Screening'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /api/screenings/{screening_id}/seats:
+    get:
+      tags: [Public]
+      summary: Получить схему мест и доступность
+      parameters:
+        - $ref: '#/components/parameters/ScreeningId'
+      responses:
+        '200':
+          description: Сеанс и места
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  screening: {$ref: '#/components/schemas/ScreeningSeatInfo'}
+                  seats:
+                    type: array
+                    items: {$ref: '#/components/schemas/Seat'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/me:
+    get:
+      tags: [Authentication]
+      summary: Получить текущего пользователя и CSRF-токен
+      responses:
+        '200':
+          description: Состояние входа
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    allOf:
+                      - $ref: '#/components/schemas/User'
+                    nullable: true
+                  csrf_token:
+                    type: string
+                    nullable: true
+  /api/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Зарегистрировать пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Credentials'}
+      responses:
+        '201': {$ref: '#/components/responses/AuthSuccess'}
+        '409':
+          description: Адрес уже зарегистрирован
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /api/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Войти
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Credentials'}
+      responses:
+        '200': {$ref: '#/components/responses/AuthSuccess'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429':
+          description: Превышен лимит попыток
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Завершить текущую сессию
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Сессия завершена
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/bookings:
+    get:
+      tags: [Bookings]
+      summary: Получить заказы текущего пользователя
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Заказы
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookings:
+                    type: array
+                    items: {$ref: '#/components/schemas/Booking'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      tags: [Bookings]
+      summary: Забронировать или купить выбранные места
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [screening_id, seat_ids, mode]
+              properties:
+                screening_id: {type: integer, minimum: 1}
+                seat_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  uniqueItems: true
+                  items: {type: integer, minimum: 1}
+                mode:
+                  type: string
+                  enum: [reserve, purchase]
+      responses:
+        '201':
+          description: Заказ создан
+          headers:
+            Location:
+              description: Адрес созданного заказа
+              schema: {type: string, example: /api/bookings/1}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking: {$ref: '#/components/schemas/Booking'}
+        '409':
+          description: Место занято или сеанс начался
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /api/bookings/{booking_id}:
+    parameters:
+      - in: path
+        name: booking_id
+        required: true
+        schema: {type: integer, minimum: 1}
+    get:
+      tags: [Bookings]
+      summary: Получить собственный заказ
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Заказ со списком мест
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking: {$ref: '#/components/schemas/Booking'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Bookings]
+      summary: Отменить собственную бронь и освободить места
+      description: >-
+        Идемпотентная отмена. Повторная отмена возвращает 204.
+        История заказа сохраняется со статусом cancelled.
+        Оплаченные и истёкшие заказы дают 409, чужие заказы дают 404.
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      responses:
+        '204': {description: Бронь отменена; тело отсутствует}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: Заказ нельзя отменить}
+  /api/bookings/{booking_id}/cancel:
+    post:
+      tags: [Bookings]
+      summary: Отменить действующую бронь
+      deprecated: true
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      parameters:
+        - in: path
+          name: booking_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Бронь отменена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking: {$ref: '#/components/schemas/Booking'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Заказ нельзя отменить
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /api/admin/movies:
+    post:
+      tags: [Administration]
+      summary: Добавить фильм
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MovieInput'}
+      responses:
+        '201':
+          description: Фильм добавлен
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+  /api/admin/movies/{movie_id}:
+    put:
+      tags: [Administration]
+      summary: Полностью заменить редактируемые поля фильма
+      description: Все пять полей обязательны. Длительность фильма с будущими сеансами менять нельзя.
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      parameters:
+        - in: path
+          name: movie_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/MovieInput'
+                - type: object
+                  required: [active]
+                  properties:
+                    active: {type: boolean}
+      responses:
+        '200': {description: Фильм изменён}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {description: Длительность заблокирована будущими сеансами}
+        '422': {$ref: '#/components/responses/ValidationError'}
+    patch:
+      tags: [Administration]
+      summary: Изменить фильм или его активность
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      parameters:
+        - in: path
+          name: movie_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                title: {type: string, minLength: 1, maxLength: 160}
+                description: {type: string, minLength: 1, maxLength: 3000}
+                duration_min: {type: integer, minimum: 1, maximum: 600}
+                age_rating: {type: string, minLength: 1, maxLength: 10}
+                active: {type: boolean}
+      responses:
+        '200': {description: Фильм изменён}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/admin/halls:
+    get:
+      tags: [Administration]
+      summary: Получить залы
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Список залов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  halls:
+                    type: array
+                    items: {$ref: '#/components/schemas/Hall'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Administration]
+      summary: Создать зал и места
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HallInput'}
+      responses:
+        '201': {description: Зал создан}
+        '409':
+          description: Название занято
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /api/admin/halls/{hall_id}:
+    patch:
+      tags: [Administration]
+      summary: Изменить зал
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      parameters:
+        - in: path
+          name: hall_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                rows_count: {type: integer, minimum: 1, maximum: 30}
+                seats_per_row: {type: integer, minimum: 1, maximum: 50}
+                active: {type: boolean}
+      responses:
+        '200': {description: Зал изменён}
+        '409':
+          description: Схема зала заблокирована связанными данными
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /api/admin/screenings:
+    post:
+      tags: [Administration]
+      summary: Создать сеанс
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [movie_id, hall_id, starts_at, base_price_cents]
+              properties:
+                movie_id: {type: integer, minimum: 1}
+                hall_id: {type: integer, minimum: 1}
+                starts_at: {type: string, format: date-time}
+                description: {type: string, maxLength: 1000}
+                base_price_cents: {type: integer, minimum: 0}
+      responses:
+        '201': {description: Сеанс создан}
+        '409':
+          description: Сеанс пересекается с другим
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /api/admin/screenings/{screening_id}/price:
+    patch:
+      tags: [Administration]
+      summary: Изменить цену будущего сеанса
+      security:
+        - cookieAuth: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ScreeningId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_price_cents]
+              properties:
+                base_price_cents: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Цена изменена}
+        '409':
+          description: Сеанс уже начался или отменён
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: cinema_session
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    ScreeningId:
+      in: path
+      name: screening_id
+      required: true
+      schema: {type: integer, minimum: 1}
+  responses:
+    AuthSuccess:
+      description: Вход выполнен; сервер также устанавливает HttpOnly cookie
+      headers:
+        Set-Cookie:
+          schema: {type: string}
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              user: {$ref: '#/components/schemas/User'}
+              csrf_token: {type: string}
+    ValidationError:
+      description: Ошибка проверки входных данных
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthorized:
+      description: Требуется вход
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: Недостаточно прав или неверный CSRF-токен
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: Объект не найден
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    User:
+      type: object
+      required: [id, email, role]
+      properties:
+        id: {type: integer}
+        email: {type: string, format: email}
+        role: {type: string, enum: [user, admin]}
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, format: password, minLength: 8, maxLength: 128}
+    Movie:
+      type: object
+      required: [id, title, description, duration_min, age_rating]
+      properties:
+        id: {type: integer}
+        title: {type: string}
+        description: {type: string}
+        duration_min: {type: integer}
+        age_rating: {type: string}
+    MovieInput:
+      type: object
+      required: [title, description, duration_min, age_rating]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 160}
+        description: {type: string, minLength: 1, maxLength: 3000}
+        duration_min: {type: integer, minimum: 1, maximum: 600}
+        age_rating: {type: string, minLength: 1, maxLength: 10}
+    Screening:
+      type: object
+      properties:
+        id: {type: integer}
+        movie_id: {type: integer}
+        hall_id: {type: integer}
+        starts_at: {type: string, format: date-time}
+        description: {type: string}
+        base_price_cents: {type: integer}
+        movie_title: {type: string}
+        duration_min: {type: integer}
+        age_rating: {type: string}
+        hall_name: {type: string}
+    ScreeningSeatInfo:
+      type: object
+      properties:
+        id: {type: integer}
+        hall_id: {type: integer}
+        starts_at: {type: string, format: date-time}
+        base_price_cents: {type: integer}
+        movie_title: {type: string}
+        hall_name: {type: string}
+        rows_count: {type: integer}
+        seats_per_row: {type: integer}
+    Seat:
+      type: object
+      properties:
+        id: {type: integer}
+        row_number: {type: integer}
+        seat_number: {type: integer}
+        available: {type: integer, enum: [0, 1]}
+    Booking:
+      type: object
+      properties:
+        id: {type: integer}
+        code: {type: string}
+        mode: {type: string, enum: [reserve, purchase]}
+        status: {type: string, enum: [reserved, paid, cancelled, expired]}
+        total_cents: {type: integer}
+        expires_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+        starts_at: {type: string, format: date-time}
+        movie_title: {type: string}
+        hall_name: {type: string}
+        seats:
+          type: array
+          items: {$ref: '#/components/schemas/BookingSeat'}
+    BookingSeat:
+      type: object
+      properties:
+        id: {type: integer}
+        row_number: {type: integer}
+        seat_number: {type: integer}
+        price_cents: {type: integer}
+        status: {type: string}
+    Hall:
+      type: object
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        rows_count: {type: integer}
+        seats_per_row: {type: integer}
+        capacity: {type: integer}
+        active: {type: integer, enum: [0, 1]}
+    HallInput:
+      type: object
+      required: [name, rows_count, seats_per_row]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        rows_count: {type: integer, minimum: 1, maximum: 30}
+        seats_per_row: {type: integer, minimum: 1, maximum: 50}
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: {type: string}
+            message: {type: string}
+            details: {nullable: true}
+        request_id: {type: string}
